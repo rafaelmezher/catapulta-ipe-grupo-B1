@@ -25,6 +25,7 @@ Stepper motorEsticador(PASSOS_POR_VOLTA, 19, 5, 18, 17);
 Stepper motorGatilho  (PASSOS_POR_VOLTA, 16, 2,  4, 15);
 
 bool sistemaArmado = false;
+int  passosAtuais  = 0;
 
 // Gira o motor em chunks para alimentar o Watchdog Timer do ESP32
 void stepComYield(Stepper& motor, int passos) {
@@ -60,6 +61,7 @@ void handleArmar() {
   server.send(200, "text/plain",
     "Armando para " + String(dist, 1) + "m (" + String(passos) + " passos)");
   stepComYield(motorEsticador, passos);
+  passosAtuais  = passos;
   sistemaArmado = true;
   digitalWrite(LED_VERDE, HIGH);
   Serial.printf("[ARMAR] %.1fm -> %d passos\n", dist, passos);
@@ -85,7 +87,8 @@ void handleDesarmar() {
     return;
   }
   server.send(200, "text/plain", "Desarmando...");
-  stepComYield(motorEsticador, -PASSOS_MAX);
+  stepComYield(motorEsticador, -passosAtuais);
+  passosAtuais  = 0;
   sistemaArmado = false;
   digitalWrite(LED_VERDE, LOW);
   Serial.println("[DESARMAR] Tensao liberada.");
