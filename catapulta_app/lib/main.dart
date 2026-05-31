@@ -44,30 +44,30 @@ class _ControlePageState extends State<ControlePage> {
   int _selectedIndex = 0;
 
   // Configurações avançadas
-  int _passosMin = 200;
-  int _passosMax = 4096;
   int _passosGatilho = 512;
+  int _anguloMin     = 45;
+  int _anguloMax     = 180;
   bool _carregandoConfig = false;
   String _mensagemConfig = '';
   bool _configSucesso = false;
 
-  late final TextEditingController _ctrlMin;
-  late final TextEditingController _ctrlMax;
   late final TextEditingController _ctrlGatilho;
+  late final TextEditingController _ctrlAnguloMin;
+  late final TextEditingController _ctrlAnguloMax;
 
   @override
   void initState() {
     super.initState();
-    _ctrlMin = TextEditingController(text: '$_passosMin');
-    _ctrlMax = TextEditingController(text: '$_passosMax');
-    _ctrlGatilho = TextEditingController(text: '$_passosGatilho');
+    _ctrlGatilho   = TextEditingController(text: '$_passosGatilho');
+    _ctrlAnguloMin = TextEditingController(text: '$_anguloMin');
+    _ctrlAnguloMax = TextEditingController(text: '$_anguloMax');
   }
 
   @override
   void dispose() {
-    _ctrlMin.dispose();
-    _ctrlMax.dispose();
     _ctrlGatilho.dispose();
+    _ctrlAnguloMin.dispose();
+    _ctrlAnguloMax.dispose();
     super.dispose();
   }
 
@@ -106,8 +106,9 @@ class _ControlePageState extends State<ControlePage> {
           .timeout(const Duration(seconds: 15));
       setState(() {
         _armado = false;
-        _mensagem =
-            resp.statusCode == 200 ? 'Lançado com sucesso!' : 'Erro: ${resp.body}';
+        _mensagem = resp.statusCode == 200
+            ? 'Lançado! Recarregue e pressione ARMAR.'
+            : 'Erro: ${resp.body}';
       });
     } catch (_) {
       setState(() => _mensagem = 'Sem conexão. Conecte ao WiFi "Catapulta_IME".');
@@ -137,21 +138,22 @@ class _ControlePageState extends State<ControlePage> {
   }
 
   Future<void> _configurar() async {
-    final min = int.tryParse(_ctrlMin.text.trim());
-    final max = int.tryParse(_ctrlMax.text.trim());
     final gatilho = int.tryParse(_ctrlGatilho.text.trim());
+    final angMin  = int.tryParse(_ctrlAnguloMin.text.trim());
+    final angMax  = int.tryParse(_ctrlAnguloMax.text.trim());
 
-    if (min == null || max == null || gatilho == null ||
-        min <= 0 || max <= 0 || gatilho <= 0) {
+    if (gatilho == null || gatilho <= 0 ||
+        angMin == null || angMin < 0 || angMin > 180 ||
+        angMax == null || angMax < 0 || angMax > 180) {
       setState(() {
-        _mensagemConfig = 'Valores inválidos. Use números inteiros positivos.';
+        _mensagemConfig = 'Valores inválidos. Ângulos: 0–180. Gatilho: positivo.';
         _configSucesso = false;
       });
       return;
     }
-    if (min >= max) {
+    if (angMin >= angMax) {
       setState(() {
-        _mensagemConfig = 'Passos mín deve ser menor que passos máx.';
+        _mensagemConfig = 'Ângulo mín deve ser menor que ângulo máx.';
         _configSucesso = false;
       });
       return;
@@ -164,13 +166,15 @@ class _ControlePageState extends State<ControlePage> {
     });
     try {
       final uri = Uri.parse(
-          '$_baseUrl/configurar?passos_min=$min&passos_max=$max&passos_gatilho=$gatilho');
+        '$_baseUrl/configurar'
+        '?angulo_min=$angMin&angulo_max=$angMax&passos_gatilho=$gatilho',
+      );
       final resp = await http.get(uri).timeout(const Duration(seconds: 10));
       setState(() {
         if (resp.statusCode == 200) {
-          _passosMin = min;
-          _passosMax = max;
           _passosGatilho = gatilho;
+          _anguloMin     = angMin;
+          _anguloMax     = angMax;
           _mensagemConfig = 'Configuração aplicada com sucesso.';
           _configSucesso = true;
         } else {
@@ -264,7 +268,7 @@ class _ControlePageState extends State<ControlePage> {
             ),
             const SizedBox(height: 4),
 
-            // Slider
+            // Slider — 0,5 m a 4,0 m, 35 divisões de 0,1 m
             Row(
               children: [
                 Text('0,5 m',
@@ -330,7 +334,7 @@ class _ControlePageState extends State<ControlePage> {
 
             // Botão Desarmar
             OutlinedButton.icon(
-              onPressed: !_armado || _carregando ? null : _desarmar,
+              onPressed: _carregando ? null : _desarmar,
               icon: const Icon(Icons.lock_open, size: 18),
               label: const Text('Desarmar (soltar tensão)'),
               style: OutlinedButton.styleFrom(
@@ -378,13 +382,14 @@ class _ControlePageState extends State<ControlePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Ajuste os limites de passos dos motores conforme os testes mecânicos. '
-              'As configurações valem até o ESP32 ser reiniciado.',
+              'Ajuste os passos do gatilho conforme os testes mecânicos. '
+              'A calibração balística (ângulos mín/máx do servo) é feita '
+              'diretamente no firmware. Configurações valem até o ESP32 ser reiniciado.',
               style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
             ),
             const SizedBox(height: 28),
 
-            // Card — Motor Esticador
+            // Card — Servo Tração
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -393,10 +398,10 @@ class _ControlePageState extends State<ControlePage> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.compress, color: cs.primary, size: 20),
+                        Icon(Icons.rotate_right, color: cs.primary, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          'Motor Esticador',
+                          'Servo Tração (MG996R)',
                           style: Theme.of(context)
                               .textTheme
                               .titleMedium
@@ -406,29 +411,31 @@ class _ControlePageState extends State<ControlePage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Mapeamento linear: distância → passos do motor.',
+                      'Mapeamento linear: distância → ângulo do servo.',
                       style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _ctrlMin,
+                      controller: _ctrlAnguloMin,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: const InputDecoration(
-                        labelText: 'Passos mínimos  (distância 0,5 m)',
+                        labelText: 'Ângulo mínimo  (distância 0,5 m)',
+                        helperText: 'Padrão: 45°',
                         border: OutlineInputBorder(),
-                        suffixText: 'passos',
+                        suffixText: '°',
                       ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _ctrlMax,
+                      controller: _ctrlAnguloMax,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: const InputDecoration(
-                        labelText: 'Passos máximos  (distância 4,0 m)',
+                        labelText: 'Ângulo máximo  (distância 4,0 m)',
+                        helperText: 'Padrão: 180°',
                         border: OutlineInputBorder(),
-                        suffixText: 'passos',
+                        suffixText: '°',
                       ),
                     ),
                   ],
@@ -537,7 +544,7 @@ class _ControlePageState extends State<ControlePage> {
                       style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
                   const SizedBox(height: 6),
                   Text(
-                    'Passos mín: $_passosMin  |  Passos máx: $_passosMax  |  Gatilho: $_passosGatilho',
+                    'Servo: $_anguloMin° – $_anguloMax°  |  Gatilho: $_passosGatilho passos',
                     style: TextStyle(
                         color: cs.onSurface,
                         fontWeight: FontWeight.w500,
